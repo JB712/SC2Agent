@@ -28,10 +28,14 @@ _PLAYER_HOSTILE = 4
 _ARMY_SUPPLY = 5
 
 _TERRAN_COMMANDCENTER = 18
-_TERRAN_SCV = 45 
+_TERRAN_SCV = 45
 _TERRAN_SUPPLY_DEPOT = 19
 _TERRAN_BARRACKS = 21
+_TERRAN_BARRACKSTECHLAB = 37
+_TERRAN_BARRACKSREACTOR = 38
 _NEUTRAL_MINERAL_FIELD = 341
+_NEUTRAL_VESPENEGEYSER = 342 #_GEYSER = 343
+_TERRAN_REFINERY = 20
 
 _NOT_QUEUED = [0]
 _QUEUED = [1]
@@ -44,12 +48,14 @@ ACTION_BUILD_SUPPLY_DEPOT = 'buildsupplydepot'
 ACTION_BUILD_BARRACKS = 'buildbarracks'
 ACTION_BUILD_MARINE = 'buildmarine'
 ACTION_ATTACK = 'attack'
+ACTION_BUILD_REFINERY = 'buildrefinery'
 
 smart_actions = [
         ACTION_DO_NOTHING,
         ACTION_BUILD_SUPPLY_DEPOT,
         ACTION_BUILD_BARRACKS,
         ACTION_BUILD_MARINE,
+		 ACTION_BUILD_REFINERY,
 ]
 
 for mm_x in range(0, 64):
@@ -178,16 +184,20 @@ class SparseAgent(base_agent.BaseAgent):
 		barracks_y, barracks_x = (unit_type == _TERRAN_BARRACKS).nonzero()
 		barracks_count = int(round(len(barracks_y) / 137))
 
+		refinery_y, refinery_x = (unit_type == _TERRAN_REFINERY).nonzero()
+		refinery_count = int(round(len(refinery_y) / 137))
+
 		if self.move_number == 0:
 			self.move_number += 1
 
-			current_state = np.zeros(8)
+			current_state = np.zeros(9)
 			current_state[0] = cc_count
 			current_state[1] = supply_depot_count
 			current_state[2] = barracks_count
 			current_state[3] = obs.observation['player'][_ARMY_SUPPLY]
+			current_state[4] = refinery_count
 
-			hot_squares = np.zeros(4)        
+			hot_squares = np.zeros(4)
 			enemy_y, enemy_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
 			for i in range(0, len(enemy_y)):
 				y = int(math.ceil((enemy_y[i] + 1) / 32))
@@ -199,7 +209,7 @@ class SparseAgent(base_agent.BaseAgent):
 				hot_squares = hot_squares[::-1]
 
 			for i in range(0, 4):
-				current_state[i + 4] = hot_squares[i]
+				current_state[i + 5] = hot_squares[i]
 
 			if self.previous_action is not None:
 				self.qlearn.learn(str(self.previous_state), self.previous_action, 0, str(current_state))
@@ -211,7 +221,7 @@ class SparseAgent(base_agent.BaseAgent):
 
 			smart_action, x, y = self.splitAction(self.previous_action)
 
-			if smart_action == ACTION_BUILD_BARRACKS or smart_action == ACTION_BUILD_SUPPLY_DEPOT:
+			if smart_action == ACTION_BUILD_BARRACKS or smart_action == ACTION_BUILD_SUPPLY_DEPOT or smart_action == ACTION_BUILD_REFINERY:
 				unit_y, unit_x = (unit_type == _TERRAN_SCV).nonzero()
 
 				if unit_y.any():
@@ -235,6 +245,24 @@ class SparseAgent(base_agent.BaseAgent):
 			self.move_number += 1
 
 			smart_action, x, y = self.splitAction(self.previous_action)
+
+			if smart_action == ACTION_BUILD_REFINERY:
+				if refinery_count < 2 and _BUILD_REFINERY in obs.observation['available_actions']:
+					if self.cc_y.any():
+						if refinery_count == 0:
+							unit_x, unit_y = (unit_type == _NEUTRAL_VESPENEGEYSER).nonzero()
+							if unit_y.any():
+								i = random.randint(0, len(unit_y) - 1)
+								t_y,t_x = unit_y[i],unit_x[i]
+							target = [t_y,t_x]
+						elif refinery_count == 1:
+							unit_x, unit_y = (unit_type == _NEUTRAL_VESPENEGEYSER).nonzero()
+							if unit_y.any():
+								i = random.randint(0, len(unit_y) - 1)
+								t_y,t_x = unit_y[i],unit_x[i]
+							target = [t_y,t_x]
+
+						return actions.FunctionCall(_BUILD_REFINERY, [_NOT_QUEUED, target])
 
 			if smart_action == ACTION_BUILD_SUPPLY_DEPOT:
 				if supply_depot_count < 2 and _BUILD_SUPPLY_DEPOT in obs.observation['available_actions']:
@@ -292,6 +320,7 @@ class SparseAgent(base_agent.BaseAgent):
 
 						target = [int(m_x), int(m_y)]
 
-						return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+						#return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+						return actions.FunctionCall(_NO_OP, [])
 
 		return actions.FunctionCall(_NO_OP, [])
