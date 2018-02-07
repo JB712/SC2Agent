@@ -1,6 +1,7 @@
 import random
 import math
 import os.path
+import logging
 
 import numpy as np
 import pandas as pd
@@ -146,11 +147,22 @@ class SparseAgent(base_agent.BaseAgent):
 
 	def step(self, obs):
 		super(SparseAgent, self).step(obs)
-
+		
 		if obs.last():
 			reward = obs.reward
 
 			self.qlearn.learn(str(self.previous_state), self.previous_action, reward, 'terminal')
+			
+			if reward == 1:
+				reponse = 'VICTORY'
+			if reward == 0:
+				reponse = 'DRAW'
+			if reward == -1:
+				reponse = 'DEFEAT'
+			
+			file = open("testfile.txt","a")
+			file.write(str(reponse) + '\n')
+			file.close()
 
 			self.qlearn.q_table.to_pickle(DATA_FILE + '.gz', 'gzip')
 
