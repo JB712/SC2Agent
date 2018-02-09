@@ -9,6 +9,9 @@ from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.lib import features
 
+Max_Barracks = 7    #up to 7
+Max_Supply_Depot = 6    #up to 6
+
 _NO_OP = actions.FUNCTIONS.no_op.id
 _SELECT_POINT = actions.FUNCTIONS.select_point.id
 _BUILD_SUPPLY_DEPOT = actions.FUNCTIONS.Build_SupplyDepot_screen.id
@@ -18,6 +21,11 @@ _SELECT_ARMY = actions.FUNCTIONS.select_army.id
 _ATTACK_MINIMAP = actions.FUNCTIONS.Attack_minimap.id
 _HARVEST_GATHER = actions.FUNCTIONS.Harvest_Gather_screen.id
 _BUILD_REFINERY = actions.FUNCTIONS.Build_Refinery_screen.id
+_TRAIN_MARAUDER = actions.FUNCTIONS.Train_Marauder_quick.id
+_BUILD_TECHLAB = actions.FUNCTIONS.Build_TechLab_screen.id    #Build_TechLab_quick seems not to work
+_BUILD_TECHLABq = actions.FUNCTIONS.Build_TechLab_quick.id
+_TRAIN_REAPER = actions.FUNCTIONS.Train_Reaper_quick.id
+_TRAIN_SCV = actions.FUNCTIONS.Train_SCV_quick.id
 
 _PLAYER_RELATIVE = features.SCREEN_FEATURES.player_relative.index
 _UNIT_TYPE = features.SCREEN_FEATURES.unit_type.index
@@ -49,6 +57,9 @@ ACTION_BUILD_BARRACKS = 'buildbarracks'
 ACTION_BUILD_MARINE = 'buildmarine'
 ACTION_ATTACK = 'attack'
 ACTION_BUILD_REFINERY = 'buildrefinery'
+ACTION_BUILD_MARAUDER = 'buildmarauder'
+ACTION_BUILD_REAPER = 'buildreaper'
+ACTION_BUILD_SCV = 'buildscv'
 
 smart_actions = [
         ACTION_DO_NOTHING,
@@ -56,6 +67,9 @@ smart_actions = [
         ACTION_BUILD_BARRACKS,
         ACTION_BUILD_MARINE,
 		 ACTION_BUILD_REFINERY,
+#		 ACTION_BUILD_MARAUDER,    Not working !
+		 ACTION_BUILD_REAPER,
+		 ACTION_BUILD_SCV,
 ]
 
 for mm_x in range(0, 64):
@@ -68,7 +82,7 @@ for mm_x in range(0, 64):
 
 # Stolen from https://github.com/MorvanZhou/Reinforcement-learning-with-tensorflow
 class QLearningTable:
-	def __init__(self, actions, learning_rate=0.01, reward_decay=0.9, e_greedy=0.9):
+	def __init__(self, actions, learning_rate=0.01, reward_decay=0.9, e_greedy=0.85):
 		self.actions = actions  # a list
 		self.lr = learning_rate
 		self.gamma = reward_decay
@@ -123,6 +137,9 @@ class SparseAgent(base_agent.BaseAgent):
 		self.cc_y = None
 		self.cc_x = None
 
+		self.isTechlab = 0
+		self.scv_count = 12
+
 		self.move_number = 0
 
 		if os.path.isfile(DATA_FILE + '.gz'):
@@ -175,6 +192,9 @@ class SparseAgent(base_agent.BaseAgent):
 
 			self.cc_y, self.cc_x = (unit_type == _TERRAN_COMMANDCENTER).nonzero()
 
+			self.isTechlab = 0
+			self.scv_count = 12
+
 		cc_y, cc_x = (unit_type == _TERRAN_COMMANDCENTER).nonzero()
 		cc_count = 1 if cc_y.any() else 0
 
@@ -190,12 +210,13 @@ class SparseAgent(base_agent.BaseAgent):
 		if self.move_number == 0:
 			self.move_number += 1
 
-			current_state = np.zeros(9)
+			current_state = np.zeros(10)
 			current_state[0] = cc_count
 			current_state[1] = supply_depot_count
 			current_state[2] = barracks_count
 			current_state[3] = obs.observation['player'][_ARMY_SUPPLY]
 			current_state[4] = refinery_count
+			current_state[5] = self.scv_count
 
 			hot_squares = np.zeros(4)
 			enemy_y, enemy_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
@@ -209,7 +230,7 @@ class SparseAgent(base_agent.BaseAgent):
 				hot_squares = hot_squares[::-1]
 
 			for i in range(0, 4):
-				current_state[i + 5] = hot_squares[i]
+				current_state[i + 6] = hot_squares[i]
 
 			if self.previous_action is not None:
 				self.qlearn.learn(str(self.previous_state), self.previous_action, 0, str(current_state))
@@ -230,7 +251,7 @@ class SparseAgent(base_agent.BaseAgent):
 
 					return actions.FunctionCall(_SELECT_POINT, [_NOT_QUEUED, target])
 
-			elif smart_action == ACTION_BUILD_MARINE:
+			elif smart_action == ACTION_BUILD_MARINE or smart_action == ACTION_BUILD_MARAUDER or smart_action == ACTION_BUILD_REAPER:
 				if barracks_y.any():
 					i = random.randint(0, len(barracks_y) - 1)
 					target = [barracks_x[i], barracks_y[i]]
@@ -241,52 +262,95 @@ class SparseAgent(base_agent.BaseAgent):
 				if _SELECT_ARMY in obs.observation['available_actions']:
 					return actions.FunctionCall(_SELECT_ARMY, [_NOT_QUEUED])
 
+			elif smart_action == ACTION_BUILD_SCV:
+				if self.cc_y.any():
+					return actions.FunctionCall(_SELECT_POINT, [_NOT_QUEUED, [round(self.cc_x.mean()),round(self.cc_y.mean())]])
+
 		elif self.move_number == 1:
 			self.move_number += 1
 
 			smart_action, x, y = self.splitAction(self.previous_action)
 
 			if smart_action == ACTION_BUILD_REFINERY:
-				if refinery_count < 2 and _BUILD_REFINERY in obs.observation['available_actions']:
+				if refinery_count < 2 and _BUILD_REFINERY in obs.observation['available_actions'] and barracks_count == Max_Barracks and supply_depot_count == Max_Supply_Depot:
 					if self.cc_y.any():
 						if refinery_count == 0:
 							unit_x, unit_y = (unit_type == _NEUTRAL_VESPENEGEYSER).nonzero()
 							if unit_y.any():
-								i = random.randint(0, len(unit_y) - 1)
+								#i = random.randint(0, len(unit_y) - 1)
+								i = int(math.ceil((len(unit_y)/4)))
 								t_y,t_x = unit_y[i],unit_x[i]
 							target = [t_y,t_x]
 						elif refinery_count == 1:
 							unit_x, unit_y = (unit_type == _NEUTRAL_VESPENEGEYSER).nonzero()
 							if unit_y.any():
-								i = random.randint(0, len(unit_y) - 1)
-								t_y,t_x = unit_y[i],unit_x[i]
+								#i = random.randint(0, len(unit_y) - 1)
+								i = int(round(len(unit_y)/4))    #round originaly math.ceil
+								t_y,t_x = unit_y[3*i-1],unit_x[3*i-1]
+								print(3*i-1, " pour ", len(unit_y))
 							target = [t_y,t_x]
 
 						return actions.FunctionCall(_BUILD_REFINERY, [_NOT_QUEUED, target])
 
 			if smart_action == ACTION_BUILD_SUPPLY_DEPOT:
-				if supply_depot_count < 2 and _BUILD_SUPPLY_DEPOT in obs.observation['available_actions']:
+				if supply_depot_count < Max_Supply_Depot and _BUILD_SUPPLY_DEPOT in obs.observation['available_actions']:
 					if self.cc_y.any():
 						if supply_depot_count == 0:
 							target = self.transformDistance(round(self.cc_x.mean()), -35, round(self.cc_y.mean()), 0)
 						elif supply_depot_count == 1:
 							target = self.transformDistance(round(self.cc_x.mean()), -25, round(self.cc_y.mean()), -25)
+						elif supply_depot_count == 2:
+							target = self.transformDistance(round(self.cc_x.mean()), -15, round(self.cc_y.mean()), -35)
+						elif supply_depot_count == 3:
+							target = self.transformDistance(round(self.cc_x.mean()), -30, round(self.cc_y.mean()), -8)
+						elif supply_depot_count == 4:
+							target = self.transformDistance(round(self.cc_x.mean()), -35, round(self.cc_y.mean()), -16)
+						elif supply_depot_count == 5:
+							target = self.transformDistance(round(self.cc_x.mean()), -5, round(self.cc_y.mean()), -30)
 
 						return actions.FunctionCall(_BUILD_SUPPLY_DEPOT, [_NOT_QUEUED, target])
 
 			elif smart_action == ACTION_BUILD_BARRACKS:
-				if barracks_count < 2 and _BUILD_BARRACKS in obs.observation['available_actions']:
+				if barracks_count < Max_Barracks and _BUILD_BARRACKS in obs.observation['available_actions']:
 					if self.cc_y.any():
 						if  barracks_count == 0:
-							target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), -9)
+							target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), -12)    #initialy 15,-9
 						elif  barracks_count == 1:
 							target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), 12)
+						elif barracks_count == 2:
+							target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), 25)    #y != 30    x is the absciss // x,y=15,25 is the  out angle
+						elif barracks_count == 3:
+							target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), 0)
+						elif barracks_count == 4:
+							target = self.transformDistance(round(self.cc_x.mean()), 28, round(self.cc_y.mean()), -12)
+						elif  barracks_count == 5:
+							target = self.transformDistance(round(self.cc_x.mean()), 28, round(self.cc_y.mean()), 12)
+						elif barracks_count == 6:
+							target = self.transformDistance(round(self.cc_x.mean()), 28, round(self.cc_y.mean()), 0)
 
-						return actions.FunctionCall(_BUILD_BARRACKS, [_NOT_QUEUED, target])
+					return actions.FunctionCall(_BUILD_BARRACKS, [_NOT_QUEUED, target])
 
 			elif smart_action == ACTION_BUILD_MARINE:
 				if _TRAIN_MARINE in obs.observation['available_actions']:
 					return actions.FunctionCall(_TRAIN_MARINE, [_QUEUED])
+
+			elif smart_action == ACTION_BUILD_REAPER:
+				if _TRAIN_REAPER in obs.observation['available_actions']:
+					return actions.FunctionCall(_TRAIN_REAPER, [_QUEUED])
+
+			elif smart_action == ACTION_BUILD_MARAUDER:
+				if _BUILD_TECHLAB in obs.observation['available_actions'] and self.isTechlab < 1:
+					target = self.transformDistance(round(self.cc_x.mean()), -35, round(self.cc_y.mean()), 0)
+					#target[0] += random.randint(-5,5)
+					#target[1] += random.randint(-5,5)
+					print("on lance la recherche TECHLAB en ",target)
+					self.isTechlab += 1
+					print ("self.isTechlab = ", self.isTechlab)
+					return actions.FunctionCall(_BUILD_TECHLAB, [_NOT_QUEUED, target])
+					#return actions.FunctionCall(_BUILD_TECHLABq, [_NOT_QUEUED])
+				elif _TRAIN_MARAUDER in obs.observation['available_actions']:
+					print("l'ordre est disponible !")
+					return actions.FunctionCall(_TRAIN_MARAUDER, [_QUEUED])
 
 			elif smart_action == ACTION_ATTACK:
 				do_it = True
@@ -302,6 +366,11 @@ class SparseAgent(base_agent.BaseAgent):
 					y_offset = random.randint(-1, 1)
 
 					return actions.FunctionCall(_ATTACK_MINIMAP, [_NOT_QUEUED, self.transformLocation(int(x) + (x_offset * 8), int(y) + (y_offset * 8))])
+
+			elif smart_action == ACTION_BUILD_SCV:
+				if self.scv_count < 20 and _TRAIN_SCV in obs.observation['available_actions']:
+					self.scv_count += 1
+					return actions.FunctionCall(_TRAIN_SCV, [_QUEUED])
 
 		elif self.move_number == 2:
 			self.move_number = 0
@@ -320,7 +389,9 @@ class SparseAgent(base_agent.BaseAgent):
 
 						target = [int(m_x), int(m_y)]
 
-						#return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
-						return actions.FunctionCall(_NO_OP, [])
+						return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+						#return actions.FunctionCall(_NO_OP, [])
+			elif smart_action == ACTION_BUILD_REFINERY:
+				return actions.FunctionCall(_NO_OP, [])
 
 		return actions.FunctionCall(_NO_OP, [])
