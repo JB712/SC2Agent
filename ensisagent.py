@@ -170,20 +170,20 @@ class SparseAgent(base_agent.BaseAgent):
 
 	def step(self, obs):
 		super(SparseAgent, self).step(obs)
-		
+
 		if obs.last():
 			reward = obs.reward
 
 			self.qlearn.learn(str(self.previous_state), self.previous_action, reward, 'terminal')
-			
+
 			if reward == 1:
 				reponse = 'VICTORY'
 			if reward == 0:
 				reponse = 'DRAW'
 			if reward == -1:
 				reponse = 'DEFEAT'
-			
-			file = open("testfile.txt","a")
+
+			file = open("ResultRecord.txt","a")
 			file.write(str(reponse) + '\n')
 			file.close()
 
@@ -299,7 +299,6 @@ class SparseAgent(base_agent.BaseAgent):
 								#i = random.randint(0, len(unit_y) - 1)
 								i = int(round(len(unit_y)/4))    #round originaly math.ceil
 								t_y,t_x = unit_y[3*i-1],unit_x[3*i-1]
-								print(3*i-1, " pour ", len(unit_y))
 							target = [t_y,t_x]
 
 						return actions.FunctionCall(_BUILD_REFINERY, [_NOT_QUEUED, target])
@@ -400,9 +399,12 @@ class SparseAgent(base_agent.BaseAgent):
 						m_y = unit_y[i]
 
 						target = [int(m_x), int(m_y)]
+						if barracks_count != Max_Barracks or supply_depot_count != Max_Supply_Depot:
+							return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
 
-						return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
-						#return actions.FunctionCall(_NO_OP, [])
+						#return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+						return actions.FunctionCall(_NO_OP, [])
+
 			elif smart_action == ACTION_BUILD_REFINERY:
 				return actions.FunctionCall(_NO_OP, [])
 
