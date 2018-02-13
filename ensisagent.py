@@ -1,7 +1,6 @@
 import random
 import math
 import os.path
-import logging
 
 import numpy as np
 import pandas as pd
@@ -83,7 +82,7 @@ for mm_x in range(0, 64):
 
 # Stolen from https://github.com/MorvanZhou/Reinforcement-learning-with-tensorflow
 class QLearningTable:
-	def __init__(self, actions, learning_rate=0.01, reward_decay=0.9, e_greedy=0.85):
+	def __init__(self, actions, learning_rate=0.1, reward_decay=0.9, e_greedy=0.85):    #initialy learning_rate=0.01, reward_decay=0.9, e_greedy=0.85
 		self.actions = actions  # a list
 		self.lr = learning_rate
 		self.gamma = reward_decay
@@ -174,7 +173,12 @@ class SparseAgent(base_agent.BaseAgent):
 		if obs.last():
 			reward = obs.reward
 
-			self.qlearn.learn(str(self.previous_state), self.previous_action, reward, 'terminal')
+			if reward == 1:
+				modreward = reward * 100000
+			else:
+				modreward = reward
+
+			self.qlearn.learn(str(self.previous_state), self.previous_action, modreward, 'terminal')
 
 			if reward == 1:
 				reponse = 'VICTORY'
