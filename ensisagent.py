@@ -226,7 +226,7 @@ class SparseAgent(base_agent.BaseAgent):
 		if self.move_number == 0:
 			self.move_number += 1
 
-			current_state = np.zeros(10)
+			current_state = np.zeros(14)
 			current_state[0] = cc_count
 			current_state[1] = supply_depot_count
 			current_state[2] = barracks_count
@@ -247,6 +247,20 @@ class SparseAgent(base_agent.BaseAgent):
 
 			for i in range(0, 4):
 				current_state[i + 6] = hot_squares[i]
+
+			raid_squares = np.zeros(4)
+			ally_y, ally_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_SELF).nonzero()
+			for i in range(0, len(ally_y)):
+				y = int(math.ceil((ally_y[i] + 1) / 32))
+				x = int(math.ceil((ally_x[i] + 1) / 32))
+
+				raid_squares[((y - 1) * 2) + (x - 1)] = 1
+
+			if not self.base_top_left:
+				raid_squares = raid_squares[::-1]
+
+			for i in range(0, 4):
+				current_state[i + 10] = raid_squares[i]
 
 			if self.previous_action is not None:
 				self.qlearn.learn(str(self.previous_state), self.previous_action, 0, str(current_state))
