@@ -74,8 +74,8 @@ smart_actions = [
 
 for mm_x in range(0, 64):
 	for mm_y in range(0, 64):
-		if (mm_x + 1) % 32 == 0 and (mm_y + 1) % 32 == 0:
-			smart_actions.append(ACTION_ATTACK + '_' + str(mm_x - 16) + '_' + str(mm_y - 16))
+		if (mm_x + 1) % 16 == 0 and (mm_y + 1) % 16 == 0:
+			smart_actions.append(ACTION_ATTACK + '_' + str(mm_x - 8) + '_' + str(mm_y - 8))
 
 # python -m pysc2.bin.agent --map Simple64 --agent pysc2.agents.ensisagent.SparseAgent --agent_race T --max_agent_steps 0 --norender
 #JB python -m pysc2.bin.agent --map Simple64 --agent pysc2.agents.SC2Agent.ensisagent.SparseAgent --agent_race T --max_agent_steps 0 --norender
@@ -226,7 +226,7 @@ class SparseAgent(base_agent.BaseAgent):
 		if self.move_number == 0:
 			self.move_number += 1
 
-			current_state = np.zeros(14)
+			current_state = np.zeros(38)
 			current_state[0] = cc_count
 			current_state[1] = supply_depot_count
 			current_state[2] = barracks_count
@@ -234,33 +234,33 @@ class SparseAgent(base_agent.BaseAgent):
 			current_state[4] = refinery_count
 			current_state[5] = self.scv_count
 
-			hot_squares = np.zeros(4)
+			hot_squares = np.zeros(16)
 			enemy_y, enemy_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
 			for i in range(0, len(enemy_y)):
-				y = int(math.ceil((enemy_y[i] + 1) / 32))
-				x = int(math.ceil((enemy_x[i] + 1) / 32))
+				y = int(math.ceil((enemy_y[i] + 1) / 16))
+				x = int(math.ceil((enemy_x[i] + 1) / 16))
 
-				hot_squares[((y - 1) * 2) + (x - 1)] = 1
+				hot_squares[((y - 1) * 4) + (x - 1)] = 1
 
 			if not self.base_top_left:
 				hot_squares = hot_squares[::-1]
 
-			for i in range(0, 4):
+			for i in range(0, 16):
 				current_state[i + 6] = hot_squares[i]
 
-			raid_squares = np.zeros(4)
+			raid_squares = np.zeros(16)
 			ally_y, ally_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_SELF).nonzero()
 			for i in range(0, len(ally_y)):
-				y = int(math.ceil((ally_y[i] + 1) / 32))
-				x = int(math.ceil((ally_x[i] + 1) / 32))
+				y = int(math.ceil((ally_y[i] + 1) / 16))
+				x = int(math.ceil((ally_x[i] + 1) / 16))
 
-				raid_squares[((y - 1) * 2) + (x - 1)] = 1
+				raid_squares[((y - 1) * 4) + (x - 1)] = 1
 
 			if not self.base_top_left:
 				raid_squares = raid_squares[::-1]
 
-			for i in range(0, 4):
-				current_state[i + 10] = raid_squares[i]
+			for i in range(0, 16):
+				current_state[i + 22] = raid_squares[i]
 
 			if self.previous_action is not None:
 				self.qlearn.learn(str(self.previous_state), self.previous_action, 0, str(current_state))
@@ -394,7 +394,7 @@ class SparseAgent(base_agent.BaseAgent):
 					x_offset = random.randint(-1, 1)
 					y_offset = random.randint(-1, 1)
 
-					return actions.FunctionCall(_ATTACK_MINIMAP, [_NOT_QUEUED, self.transformLocation(int(x) + (x_offset * 8), int(y) + (y_offset * 8))])
+					return actions.FunctionCall(_ATTACK_MINIMAP, [_NOT_QUEUED, self.transformLocation(int(x) + (x_offset * 4), int(y) + (y_offset * 4))])
 
 			elif smart_action == ACTION_BUILD_SCV:
 				if self.scv_count < 20 and _TRAIN_SCV in obs.observation['available_actions']:
