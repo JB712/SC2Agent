@@ -94,7 +94,7 @@ class QLearningTable:
 
 		if np.random.uniform() < self.epsilon:
 			# choose best action
-			state_action = self.q_table.ix[observation, :]
+			state_action = self.q_table.loc[observation, :]
 
 			# some actions have the same value
 			state_action = state_action.reindex(np.random.permutation(state_action.index))
@@ -110,15 +110,15 @@ class QLearningTable:
 		self.check_state_exist(s_)
 		self.check_state_exist(s)
 
-		q_predict = self.q_table.ix[s, a]
+		q_predict = self.q_table.loc[s, a]
 
 		if s_ != 'terminal':
-			q_target = r + self.gamma * self.q_table.ix[s_, :].max()
+			q_target = r + self.gamma * self.q_table.loc[s_, :].max()
 		else:
 			q_target = r  # next state is terminal
 
 		# update
-		self.q_table.ix[s, a] += self.lr * (q_target - q_predict)
+		self.q_table.loc[s, a] += self.lr * (q_target - q_predict)
 
 	def check_state_exist(self, state):
 		if state not in self.q_table.index:
@@ -200,10 +200,10 @@ class SparseAgent(base_agent.BaseAgent):
 
 			return actions.FunctionCall(_NO_OP, [])
 
-		unit_type = obs.observation['screen'][_UNIT_TYPE]
+		unit_type = obs.observation['feature_screen'][_UNIT_TYPE]
 
 		if obs.first():
-			player_y, player_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_SELF).nonzero()
+			player_y, player_x = (obs.observation['feature_minimap'][_PLAYER_RELATIVE] == _PLAYER_SELF).nonzero()
 			self.base_top_left = 1 if player_y.any() and player_y.mean() <= 31 else 0
 
 			self.cc_y, self.cc_x = (unit_type == _TERRAN_COMMANDCENTER).nonzero()
@@ -235,7 +235,7 @@ class SparseAgent(base_agent.BaseAgent):
 			current_state[5] = self.scv_count
 
 			hot_squares = np.zeros(16)
-			enemy_y, enemy_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
+			enemy_y, enemy_x = (obs.observation['feature_minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
 			for i in range(0, len(enemy_y)):
 				y = int(math.ceil((enemy_y[i] + 1) / 16))
 				x = int(math.ceil((enemy_x[i] + 1) / 16))
@@ -249,7 +249,7 @@ class SparseAgent(base_agent.BaseAgent):
 				current_state[i + 6] = hot_squares[i]
 
 			raid_squares = np.zeros(16)
-			ally_y, ally_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_SELF).nonzero()
+			ally_y, ally_x = (obs.observation['feature_minimap'][_PLAYER_RELATIVE] == _PLAYER_SELF).nonzero()
 			for i in range(0, len(ally_y)):
 				y = int(math.ceil((ally_y[i] + 1) / 16))
 				x = int(math.ceil((ally_x[i] + 1) / 16))
